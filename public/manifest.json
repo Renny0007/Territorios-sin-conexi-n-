@@ -1,0 +1,114 @@
+{
+  "id": "/",
+  "name": "Territorios Offline - Cartografía & Navegación",
+  "short_name": "Territorios",
+  "description": "Gestión, dibujo, navegación GPS y notas de campo de territorios poligonales sin conexión a internet.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": [
+    "window-controls-overlay",
+    "standalone",
+    "minimal-ui"
+  ],
+  "orientation": "any",
+  "theme_color": "#0f172a",
+  "background_color": "#020617",
+  "lang": "es",
+  "dir": "ltr",
+  "categories": [
+    "navigation",
+    "productivity",
+    "utilities",
+    "travel"
+  ],
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "/icon-64.png",
+      "sizes": "64x64",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-256.png",
+      "sizes": "256x256",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshot-narrow.png",
+      "sizes": "720x1280",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Vista de mapa y territorios en dispositivo móvil"
+    },
+    {
+      "src": "/screenshot-wide.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Vista de panel y mapa cartográfico en pantalla completa"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Mapa y Cartografía",
+      "short_name": "Mapa",
+      "description": "Abrir el mapa interactivo de territorios",
+      "url": "/",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Descargas Offline",
+      "short_name": "Offline",
+      "description": "Gestionar áreas de mapas guardadas",
+      "url": "/?view=offline",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

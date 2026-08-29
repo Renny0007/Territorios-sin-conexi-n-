@@ -1,0 +1,6 @@
+{
+  "name": "Territorios Offline",
+  "description": "Aplicación web progresiva táctica para gestión, dibujo de polígonos, notas de campo, navegación peatonal y mapas sin conexión.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
