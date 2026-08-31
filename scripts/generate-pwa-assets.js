@@ -7,68 +7,73 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const publicDir = path.join(__dirname, '../public');
 
-const svgPath = path.join(publicDir, 'icon.svg');
-const svgBuffer = fs.readFileSync(svgPath);
+const sourceIconPath = path.join(__dirname, '../src/assets/images/app_icon_1788216160377.jpg');
+const sourceBuffer = fs.readFileSync(sourceIconPath);
 
 // Standard icon sizes
 const sizes = [64, 128, 180, 192, 256, 384, 512];
 
 async function generateAssets() {
-  console.log('Generating PNG icons...');
+  console.log('Generating PNG icons from new app icon...');
   
   for (const size of sizes) {
-    await sharp(svgBuffer)
+    await sharp(sourceBuffer)
       .resize(size, size)
-      .png()
+      .png({ quality: 100 })
       .toFile(path.join(publicDir, `icon-${size}.png`));
     console.log(`Generated icon-${size}.png`);
   }
 
   // Apple touch icon (180x180)
-  await sharp(svgBuffer)
+  await sharp(sourceBuffer)
     .resize(180, 180)
-    .png()
+    .png({ quality: 100 })
     .toFile(path.join(publicDir, 'apple-touch-icon.png'));
   console.log('Generated apple-touch-icon.png');
 
   // Favicon 32x32 & 48x48
-  await sharp(svgBuffer)
-    .resize(32, 32)
-    .png()
+  await sharp(sourceBuffer)
+    .resize(48, 48)
+    .png({ quality: 100 })
     .toFile(path.join(publicDir, 'favicon.png'));
+  console.log('Generated favicon.png');
 
-  // Maskable icon with safe-zone padding
-  const maskableSvg = `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-      <rect width="512" height="512" fill="#0f172a"/>
-      <g transform="translate(51.2, 51.2) scale(0.8)">
-        <polygon points="120,380 90,200 240,110 410,160 430,340 280,420" 
-                 fill="#065f46" stroke="#10b981" stroke-width="12" stroke-linejoin="round"/>
-        <circle cx="120" cy="380" r="14" fill="#10b981" stroke="#ffffff" stroke-width="4"/>
-        <circle cx="90" cy="200" r="14" fill="#10b981" stroke="#ffffff" stroke-width="4"/>
-        <circle cx="240" cy="110" r="14" fill="#10b981" stroke="#ffffff" stroke-width="4"/>
-        <circle cx="410" cy="160" r="14" fill="#10b981" stroke="#ffffff" stroke-width="4"/>
-        <circle cx="430" cy="340" r="14" fill="#10b981" stroke="#ffffff" stroke-width="4"/>
-        <circle cx="280" cy="420" r="14" fill="#10b981" stroke="#ffffff" stroke-width="4"/>
-        <path d="M260,190 C226.8,190 200,216.8 200,250 C200,295 260,360 260,360 C260,360 320,295 320,250 C320,216.8 293.2,190 260,190 Z" 
-              fill="#2563eb" stroke="#ffffff" stroke-width="6"/>
-        <circle cx="260" cy="250" r="24" fill="#0f172a" stroke="#38bdf8" stroke-width="4"/>
-        <circle cx="260" cy="250" r="12" fill="#38bdf8"/>
-      </g>
-    </svg>
-  `;
-  const maskableBuffer = Buffer.from(maskableSvg);
+  // Maskable icon with safe-zone padding (Android adaptive icons safe area is central 80%)
+  const resizedForMaskable192 = await sharp(sourceBuffer)
+    .resize(154, 154)
+    .png()
+    .toBuffer();
 
-  await sharp(maskableBuffer)
-    .resize(192, 192)
+  await sharp({
+    create: {
+      width: 192,
+      height: 192,
+      channels: 4,
+      background: { r: 15, g: 23, b: 42, alpha: 1 }
+    }
+  })
+    .composite([{ input: resizedForMaskable192, gravity: 'center' }])
     .png()
     .toFile(path.join(publicDir, 'icon-maskable-192.png'));
 
-  await sharp(maskableBuffer)
-    .resize(512, 512)
+  const resizedForMaskable512 = await sharp(sourceBuffer)
+    .resize(410, 410)
+    .png()
+    .toBuffer();
+
+  await sharp({
+    create: {
+      width: 512,
+      height: 512,
+      channels: 4,
+      background: { r: 15, g: 23, b: 42, alpha: 1 }
+    }
+  })
+    .composite([{ input: resizedForMaskable512, gravity: 'center' }])
     .png()
     .toFile(path.join(publicDir, 'icon-maskable-512.png'));
   console.log('Generated maskable icons.');
+
 
   // Generate Screenshots
   // 1. Narrow screenshot (mobile - 720x1280)
