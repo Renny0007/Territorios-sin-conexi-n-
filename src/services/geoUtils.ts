@@ -1,4 +1,4 @@
-import { Territory, MapNote } from '../types';
+import { Territory, MapNote, MapLabel } from '../types';
 
 const EARTH_RADIUS = 6378137; // meters (WGS84)
 
@@ -252,7 +252,7 @@ export function formatCoordinate(lat: number, lng: number): string {
 
 // --- GeoJSON Export / Import ---
 
-export function exportToGeoJSON(territories: Territory[], notes: MapNote[] = []): string {
+export function exportToGeoJSON(territories: Territory[], notes: MapNote[] = [], labels: MapLabel[] = []): string {
   const features = [];
 
   for (const t of territories) {
@@ -276,11 +276,30 @@ export function exportToGeoJSON(territories: Territory[], notes: MapNote[] = [])
         areaM2: t.areaM2,
         perimeterM: t.perimeterM,
         description: t.description || '',
+        centroid: t.centroid,
         updatedAt: t.updatedAt
       },
       geometry: {
         type: 'Polygon',
         coordinates: [ring]
+      }
+    });
+  }
+
+  for (const l of labels) {
+    features.push({
+      type: 'Feature',
+      id: l.id,
+      properties: {
+        type: 'map_label',
+        text: l.text,
+        fontSize: l.fontSize || 'md',
+        color: l.color || '#fbbf24',
+        territoryId: l.territoryId || ''
+      },
+      geometry: {
+        type: 'Point',
+        coordinates: [l.lng, l.lat]
       }
     });
   }
@@ -314,10 +333,15 @@ export function exportToGeoJSON(territories: Territory[], notes: MapNote[] = [])
   return JSON.stringify(geoJson, null, 2);
 }
 
-export function parseGeoJSON(geoJsonStr: string): { territories: Partial<Territory>[]; notes: Partial<MapNote>[] } {
+export function parseGeoJSON(geoJsonStr: string): { 
+  territories: Partial<Territory>[]; 
+  notes: Partial<MapNote>[]; 
+  labels: Partial<MapLabel>[];
+} {
   const data = JSON.parse(geoJsonStr);
   const territories: Partial<Territory>[] = [];
   const notes: Partial<MapNote>[] = [];
+  const labels: Partial<MapLabel>[] = [];
 
   const features = data.features || (data.type === 'Feature' ? [data] : []);
 
@@ -357,9 +381,9 @@ export function parseGeoJSON(geoJsonStr: string): { territories: Partial<Territo
           priority: props.priority || 'media',
           color: props.color || '#10b981',
           coordinates: coords,
-          areaM2: area,
-          perimeterM: perim,
-          centroid: cent,
+          areaM2: props.areaM2 || area,
+          perimeterM: props.perimeterM || perim,
+          centroid: props.centroid || cent,
           description: props.description || '',
           createdAt: Date.now(),
           updatedAt: Date.now()
@@ -367,26 +391,41 @@ export function parseGeoJSON(geoJsonStr: string): { territories: Partial<Territo
       }
     } else if (geom.type === 'Point') {
       const [lng, lat] = geom.coordinates;
-      notes.push({
-        id: feature.id ? String(feature.id) : `n_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        title: props.title || props.name || 'Nota Importada',
-        description: props.description || '',
-        category: props.category || 'general',
-        coordinate: [lat, lng],
-        address: props.address || '',
-        status: props.status || 'abierto',
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-      });
+      if (props.type === 'map_label' || props.type === 'letter' || props.text || (props.name && props.name.length <= 4 && !props.category)) {
+        labels.push({
+          id: feature.id ? String(feature.id) : `lbl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          text: props.text || props.name || 'A',
+          lat,
+          lng,
+          territoryId: props.territoryId,
+          fontSize: props.fontSize || 'md',
+          color: props.color || '#fbbf24',
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        });
+      } else {
+        notes.push({
+          id: feature.id ? String(feature.id) : `n_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          title: props.title || props.name || 'Nota Importada',
+          description: props.description || '',
+          category: props.category || 'general',
+          coordinate: [lat, lng],
+          address: props.address || '',
+          status: props.status || 'abierto',
+          territoryId: props.territoryId,
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        });
+      }
     }
   }
 
-  return { territories, notes };
+  return { territories, notes, labels };
 }
 
 // --- KML Export / Import ---
 
-export function exportToKML(territories: Territory[], notes: MapNote[] = []): string {
+export function exportToKML(territories: Territory[], notes: MapNote[] = [], labels: MapLabel[] = []): string {
   let placemarks = '';
 
   for (const t of territories) {
@@ -440,6 +479,26 @@ export function exportToKML(territories: Territory[], notes: MapNote[] = []): st
     </Placemark>`;
   }
 
+  for (const l of labels) {
+    placemarks += `
+    <Placemark>
+      <name>${escapeXml(l.text)}</name>
+      <description><![CDATA[
+        <b>Letra de Manzana:</b> ${escapeXml(l.text)}
+      ]]></description>
+      <ExtendedData>
+        <Data name="type"><value>map_label</value></Data>
+        <Data name="text"><value>${escapeXml(l.text)}</value></Data>
+        <Data name="fontSize"><value>${l.fontSize || 'md'}</value></Data>
+        <Data name="color"><value>${l.color || '#fbbf24'}</value></Data>
+        <Data name="territoryId"><value>${l.territoryId || ''}</value></Data>
+      </ExtendedData>
+      <Point>
+        <coordinates>${l.lng},${l.lat},0</coordinates>
+      </Point>
+    </Placemark>`;
+  }
+
   for (const n of notes) {
     placemarks += `
     <Placemark>
@@ -449,6 +508,11 @@ export function exportToKML(territories: Territory[], notes: MapNote[] = []): st
         <b>Dirección:</b> ${n.address || 'N/A'}<br/>
         <b>Detalles:</b> ${n.description}
       ]]></description>
+      <ExtendedData>
+        <Data name="type"><value>map_note</value></Data>
+        <Data name="category"><value>${n.category}</value></Data>
+        <Data name="territoryId"><value>${n.territoryId || ''}</value></Data>
+      </ExtendedData>
       <Point>
         <coordinates>${n.coordinate[1]},${n.coordinate[0]},0</coordinates>
       </Point>
@@ -459,7 +523,7 @@ export function exportToKML(territories: Territory[], notes: MapNote[] = []): st
 <kml xmlns="http://www.opengis.net/kml/2.2">
   <Document>
     <name>Territorios Offline - Exportación</name>
-    <description>Polígonos y puntos generados por Territorios Offline</description>
+    <description>Polígonos, letras y puntos generados por Territorios Offline</description>
     ${placemarks}
   </Document>
 </kml>`;
@@ -478,18 +542,35 @@ function escapeXml(unsafe: string): string {
   });
 }
 
-export function parseKML(kmlStr: string): { territories: Partial<Territory>[]; notes: Partial<MapNote>[] } {
+export function parseKML(kmlStr: string): { 
+  territories: Partial<Territory>[]; 
+  notes: Partial<MapNote>[]; 
+  labels: Partial<MapLabel>[];
+} {
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(kmlStr, 'text/xml');
   const placemarks = xmlDoc.getElementsByTagName('Placemark');
 
   const territories: Partial<Territory>[] = [];
   const notes: Partial<MapNote>[] = [];
+  const labels: Partial<MapLabel>[] = [];
 
   for (let i = 0; i < placemarks.length; i++) {
     const pm = placemarks[i];
     const name = pm.getElementsByTagName('name')[0]?.textContent || `Elemento ${i + 1}`;
     const desc = pm.getElementsByTagName('description')[0]?.textContent || '';
+
+    // Check ExtendedData for type
+    let typeVal = '';
+    const extendedData = pm.getElementsByTagName('ExtendedData')[0];
+    if (extendedData) {
+      const dataTags = extendedData.getElementsByTagName('Data');
+      for (let d = 0; d < dataTags.length; d++) {
+        if (dataTags[d].getAttribute('name') === 'type') {
+          typeVal = dataTags[d].getElementsByTagName('value')[0]?.textContent || '';
+        }
+      }
+    }
 
     // Check for Polygon
     const polygonElem = pm.getElementsByTagName('Polygon')[0];
@@ -560,22 +641,38 @@ export function parseKML(kmlStr: string): { territories: Partial<Territory>[]; n
       if (coordElem && coordElem.textContent) {
         const parts = coordElem.textContent.trim().split(',').map(s => parseFloat(s.trim()));
         if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-          notes.push({
-            id: `n_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-            title: name,
-            description: desc,
-            category: 'general',
-            coordinate: [parts[1], parts[0]],
-            status: 'abierto',
-            createdAt: Date.now(),
-            updatedAt: Date.now()
-          });
+          const lat = parts[1];
+          const lng = parts[0];
+
+          if (typeVal === 'map_label' || (name.length <= 4 && (!desc || desc.includes('Letra')))) {
+            labels.push({
+              id: `lbl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+              text: name,
+              lat,
+              lng,
+              fontSize: 'md',
+              color: '#fbbf24',
+              createdAt: Date.now(),
+              updatedAt: Date.now()
+            });
+          } else {
+            notes.push({
+              id: `n_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+              title: name,
+              description: desc,
+              category: 'general',
+              coordinate: [lat, lng],
+              status: 'abierto',
+              createdAt: Date.now(),
+              updatedAt: Date.now()
+            });
+          }
         }
       }
     }
   }
 
-  return { territories, notes };
+  return { territories, notes, labels };
 }
 
 /**

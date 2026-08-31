@@ -1,4 +1,5 @@
 import { Territory, MapNote, TilePackage, OfflineTile, OfflineRoutingGraph, AppSettings, MapLabel } from '../types';
+import { calculatePolygonArea, calculatePolygonPerimeter, calculateCentroid, isPointInPolygon, parseGeoJSON } from './geoUtils';
 
 const DB_NAME = 'territorios_offline_db';
 const DB_VERSION = 3;
@@ -386,11 +387,17 @@ class DatabaseService {
 
     const backup = {
       app: 'Territorios Offline',
-      version: 1,
+      version: 2,
       exportedAt: new Date().toISOString(),
+      summary: {
+        totalTerritories: territories.length,
+        totalLabels: labels.length,
+        totalNotes: notes.length,
+        totalTilePackages: packages.length
+      },
       territories,
-      notes,
       labels,
+      notes,
       tilePackages: packages,
       settings
     };
@@ -411,6 +418,16 @@ class DatabaseService {
       throw new Error('El archivo no contiene un formato JSON válido.');
     }
 
+    // Check if it's a GeoJSON format
+    if (data && (data.type === 'FeatureCollection' || data.type === 'Feature')) {
+      const parsed = parseGeoJSON(jsonString);
+      data = {
+        territories: parsed.territories,
+        notes: parsed.notes,
+        labels: parsed.labels
+      };
+    }
+
     const storeNames = ['territories', 'map_notes', 'app_settings'];
     if (db.objectStoreNames.contains('map_labels')) {
       storeNames.push('map_labels');
@@ -418,6 +435,8 @@ class DatabaseService {
     if (db.objectStoreNames.contains('tile_packages')) {
       storeNames.push('tile_packages');
     }
+
+    const savedTerritoriesList: Territory[] = [];
 
     return new Promise((resolve, reject) => {
       const tx = db.transaction(storeNames, 'readwrite');
@@ -429,6 +448,11 @@ class DatabaseService {
       if (Array.isArray(rawTerritories)) {
         for (const t of rawTerritories) {
           if (t && t.coordinates && Array.isArray(t.coordinates) && t.coordinates.length >= 3) {
+            const coords = t.coordinates as [number, number][];
+            const area = t.areaM2 || calculatePolygonArea(coords);
+            const perim = t.perimeterM || calculatePolygonPerimeter(coords);
+            const centroid = t.centroid || calculateCentroid(coords);
+
             const territory: Territory = {
               id: t.id || `t_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
               code: t.code || `T-${100 + importedTerritories}`,
@@ -437,16 +461,18 @@ class DatabaseService {
               status: t.status || 'activo',
               priority: t.priority || 'media',
               color: t.color || '#10b981',
-              coordinates: t.coordinates,
-              areaM2: t.areaM2 || 0,
-              perimeterM: t.perimeterM || 0,
-              centroid: t.centroid || t.coordinates[0],
+              coordinates: coords,
+              areaM2: area,
+              perimeterM: perim,
+              centroid: centroid,
               description: t.description || '',
               tags: t.tags || [],
               createdAt: t.createdAt || Date.now(),
-              updatedAt: Date.now()
+              updatedAt: Date.now(),
+              completedAt: t.completedAt
             };
             terrStore.put(territory);
+            savedTerritoriesList.push(territory);
             importedTerritories++;
           }
         }
@@ -457,13 +483,23 @@ class DatabaseService {
       if (Array.isArray(rawNotes)) {
         for (const n of rawNotes) {
           if (n && n.coordinate && Array.isArray(n.coordinate) && n.coordinate.length >= 2) {
+            const coord = n.coordinate as [number, number];
+            // If territoryId is not set, try to find enclosing territory
+            let terrId = n.territoryId;
+            if (!terrId && savedTerritoriesList.length > 0) {
+              const matched = savedTerritoriesList.find(t => isPointInPolygon(coord, t.coordinates));
+              if (matched) {
+                terrId = matched.id;
+              }
+            }
+
             noteStore.put({
               id: n.id || `n_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-              territoryId: n.territoryId,
+              territoryId: terrId,
               title: n.title || 'Nota',
               description: n.description || '',
               category: n.category || 'general',
-              coordinate: n.coordinate,
+              coordinate: coord,
               address: n.address,
               status: n.status || 'abierto',
               createdAt: n.createdAt || Date.now(),
@@ -480,14 +516,24 @@ class DatabaseService {
         const labelStore = tx.objectStore('map_labels');
         for (const l of rawLabels) {
           if (l && typeof l.lat === 'number' && typeof l.lng === 'number') {
+            const letterPos: [number, number] = [l.lat, l.lng];
+            // Ensure territory association: if territoryId is missing, check which polygon encloses this letter
+            let terrId = l.territoryId;
+            if (!terrId && savedTerritoriesList.length > 0) {
+              const matched = savedTerritoriesList.find(t => isPointInPolygon(letterPos, t.coordinates));
+              if (matched) {
+                terrId = matched.id;
+              }
+            }
+
             labelStore.put({
               id: l.id || `lbl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
               text: l.text || 'A',
               lat: l.lat,
               lng: l.lng,
-              territoryId: l.territoryId,
+              territoryId: terrId,
               fontSize: l.fontSize || 'md',
-              color: l.color,
+              color: l.color || '#fbbf24',
               createdAt: l.createdAt || Date.now(),
               updatedAt: Date.now()
             });

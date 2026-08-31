@@ -3,23 +3,43 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>Territorios Offline</title>
+    <meta name="description" content="Aplicación web progresiva táctica para gestión, dibujo de polígonos, notas de campo, navegación peatonal y mapas sin conexión." />
+    
+    <!-- PWA Primary Color & Appearance -->
     <meta name="theme-color" content="#0f172a" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="Territorios" />
+    <meta name="format-detection" content="telephone=no" />
+
+    <!-- iOS / Apple Web App Capabilities -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Territorios" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="application-name" content="Territorios" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png" />
+
+    <!-- Favicons & Manifest -->
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
     <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
-    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
-    <link rel="apple-touch-icon" href="/icon-192.png" />
     <link rel="manifest" href="/manifest.json" />
-    <title>Territorios Offline - Gestión y Cartografía</title>
-    <meta name="description" content="Gestión, dibujo, navegación y notas de campo de territorios poligonales sin conexión." />
+
+    <!-- Open Graph Social & PWA Preview -->
+    <meta property="og:title" content="Territorios Offline" />
+    <meta property="og:description" content="Aplicación web progresiva táctica para gestión, dibujo de polígonos, notas de campo, navegación peatonal y mapas sin conexión." />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="/icon-512.png" />
+
     <!-- Prevent stale HTML caching -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
+
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
   </head>

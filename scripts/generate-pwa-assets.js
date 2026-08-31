@@ -11,7 +11,7 @@ const svgPath = path.join(publicDir, 'icon.svg');
 const svgBuffer = fs.readFileSync(svgPath);
 
 // Standard icon sizes
-const sizes = [64, 128, 192, 256, 384, 512];
+const sizes = [64, 128, 180, 192, 256, 384, 512];
 
 async function generateAssets() {
   console.log('Generating PNG icons...');
@@ -23,6 +23,19 @@ async function generateAssets() {
       .toFile(path.join(publicDir, `icon-${size}.png`));
     console.log(`Generated icon-${size}.png`);
   }
+
+  // Apple touch icon (180x180)
+  await sharp(svgBuffer)
+    .resize(180, 180)
+    .png()
+    .toFile(path.join(publicDir, 'apple-touch-icon.png'));
+  console.log('Generated apple-touch-icon.png');
+
+  // Favicon 32x32 & 48x48
+  await sharp(svgBuffer)
+    .resize(32, 32)
+    .png()
+    .toFile(path.join(publicDir, 'favicon.png'));
 
   // Maskable icon with safe-zone padding
   const maskableSvg = `

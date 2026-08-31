@@ -1,11 +1,14 @@
 // Service Worker for Territorios Offline PWA
 // Cache Version: increments with every major app release to invalidate obsolete assets
-const CACHE_NAME = 'territorios-shell-v2.7.1';
+const CACHE_NAME = 'territorios-shell-v2.8.0';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
   '/icon.svg',
+  '/favicon.png',
+  '/apple-touch-icon.png',
+  '/icon-180.png',
   '/icon-192.png',
   '/icon-512.png',
   '/icon-maskable-192.png',

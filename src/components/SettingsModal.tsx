@@ -31,6 +31,7 @@ interface SettingsModalProps {
   onClearAllData: () => void;
   onOpenHelpGuide: () => void;
   onReloadAllData?: () => Promise<void>;
+  onOpenInstallModal?: () => void;
   // Biometric / Admin Protection Props
   isAdminUnlocked: boolean;
   isBiometricSupported: boolean;
@@ -44,6 +45,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClearAllData,
   onOpenHelpGuide,
   onReloadAllData,
+  onOpenInstallModal,
   isAdminUnlocked,
   isBiometricSupported,
   onUnlockWithBiometrics,
@@ -129,7 +131,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         let labelCount = 0;
 
         if (fileName.endsWith('.kml')) {
-          const { territories: parsedTerritories, notes: parsedNotes } = parseKML(content);
+          const { territories: parsedTerritories, notes: parsedNotes, labels: parsedLabels } = parseKML(content);
           for (const t of parsedTerritories) {
             if (t.coordinates && t.coordinates.length >= 3) {
               await dbService.saveTerritory(t as any);
@@ -142,12 +144,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               noteCount++;
             }
           }
+          for (const l of parsedLabels) {
+            if (typeof l.lat === 'number' && typeof l.lng === 'number') {
+              await dbService.saveMapLabel(l as any);
+              labelCount++;
+            }
+          }
         } else if (fileName.endsWith('.geojson')) {
-          const { territories: parsedTerritories } = parseGeoJSON(content);
+          const { territories: parsedTerritories, notes: parsedNotes, labels: parsedLabels } = parseGeoJSON(content);
           for (const t of parsedTerritories) {
             if (t.coordinates && t.coordinates.length >= 3) {
               await dbService.saveTerritory(t as any);
               terrCount++;
+            }
+          }
+          for (const n of parsedNotes) {
+            if (n.coordinate) {
+              await dbService.saveNote(n as any);
+              noteCount++;
+            }
+          }
+          for (const l of parsedLabels) {
+            if (typeof l.lat === 'number' && typeof l.lng === 'number') {
+              await dbService.saveMapLabel(l as any);
+              labelCount++;
             }
           }
         } else {
@@ -422,6 +442,36 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 className="px-3 py-2 bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-800 font-bold text-xs rounded-xl transition shadow"
               >
                 Borrar Todo
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* PWA Installation Card */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-md">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-cyan-950/80 border border-cyan-500/40 text-cyan-400 rounded-xl">
+                <Download className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="text-xs font-bold text-slate-200 block">
+                  Instalar como Aplicación Nativa (PWA)
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  Acceso directo en pantalla de inicio, sin barras de navegación y 100% offline
+                </span>
+              </div>
+            </div>
+
+            {onOpenInstallModal && (
+              <button
+                id="btn-settings-install-pwa"
+                onClick={onOpenInstallModal}
+                className="w-full sm:w-auto px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold transition shadow shadow-emerald-950 flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Instalar App</span>
               </button>
             )}
           </div>

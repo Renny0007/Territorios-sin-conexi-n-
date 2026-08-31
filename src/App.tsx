@@ -41,6 +41,7 @@ import { LocationPermissionModal } from './components/LocationPermissionModal';
 import { UpdateNotificationBanner } from './components/UpdateNotificationBanner';
 import { LetterModal } from './components/LetterModal';
 import { BiometricPromptModal } from './components/BiometricPromptModal';
+import { InstallPwaModal } from './components/InstallPwaModal';
 import { biometricAuthService } from './services/biometricAuth';
 
 export default function App() {
@@ -52,6 +53,11 @@ export default function App() {
   const [isAdminUnlocked, setIsAdminUnlocked] = useState<boolean>(false);
   const [isBiometricSupported, setIsBiometricSupported] = useState<boolean>(true);
   const [showBiometricModal, setShowBiometricModal] = useState<boolean>(false);
+
+  // PWA Installation state
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallModal, setShowInstallModal] = useState<boolean>(false);
+  const [isStandalone, setIsStandalone] = useState<boolean>(false);
 
   // Core Data State
   const [territories, setTerritories] = useState<Territory[]>([]);
@@ -161,9 +167,31 @@ export default function App() {
       setIsBiometricSupported(status.isSupported && status.platformAuthenticatorAvailable);
     });
 
+    // PWA Install Prompt Listener
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    const handleAppInstalled = () => {
+      setDeferredPrompt(null);
+      setIsStandalone(true);
+      showToast('🎉 ¡Aplicación instalada exitosamente!');
+    };
+
+    const checkStandalone = 
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as any).standalone === true;
+    setIsStandalone(checkStandalone);
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
     return () => {
       unsubUpdate();
       unsubGps();
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
     };
   }, []);
 
@@ -528,10 +556,30 @@ export default function App() {
     alert('Todos los datos locales han sido eliminados.');
   };
 
+  const reloadAllDataFromDB = useCallback(async () => {
+    try {
+      const [savedSettings, savedTerritories, savedNotes, savedPackages, savedLabels] = await Promise.all([
+        dbService.getSettings(),
+        dbService.getAllTerritories(),
+        dbService.getAllNotes(),
+        dbService.getAllTilePackages(),
+        dbService.getAllMapLabels()
+      ]);
+      setSettings(savedSettings);
+      setTerritories(savedTerritories);
+      setNotes(savedNotes);
+      setTilePackages(savedPackages);
+      setLabels(savedLabels || []);
+    } catch (err) {
+      console.error('Error reloading all data from DB:', err);
+    }
+  }, []);
+
   const handleImportTerritories = async (imported: Partial<Territory>[]) => {
     const savedList: Territory[] = [];
     for (const item of imported) {
       if (item.coordinates && item.coordinates.length >= 3) {
+        const coords = item.coordinates as [number, number][];
         const full: Territory = {
           id: item.id || `t_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
           code: item.code || `T-${100 + savedList.length}`,
@@ -540,11 +588,12 @@ export default function App() {
           status: item.status || 'activo',
           priority: item.priority || 'media',
           color: item.color || '#10b981',
-          coordinates: item.coordinates,
-          areaM2: item.areaM2 || calculatePolygonArea(item.coordinates),
-          perimeterM: item.perimeterM || calculatePolygonPerimeter(item.coordinates),
-          centroid: item.centroid || calculateCentroid(item.coordinates),
+          coordinates: coords,
+          areaM2: item.areaM2 || calculatePolygonArea(coords),
+          perimeterM: item.perimeterM || calculatePolygonPerimeter(coords),
+          centroid: item.centroid || calculateCentroid(coords),
           description: item.description || '',
+          tags: item.tags || [],
           createdAt: item.createdAt || Date.now(),
           updatedAt: Date.now()
         };
@@ -552,7 +601,7 @@ export default function App() {
         savedList.push(full);
       }
     }
-    setTerritories((prev) => [...savedList, ...prev]);
+    await reloadAllDataFromDB();
   };
 
   const handleCenterOnGps = () => {
@@ -570,6 +619,8 @@ export default function App() {
         onCenterLocation={handleCenterOnGps}
         onOpenBiometricPrompt={() => setShowBiometricModal(true)}
         onOpenSettings={() => setActiveTab('settings')}
+        onOpenInstallModal={() => setShowInstallModal(true)}
+        isInstallable={!isStandalone}
       />
 
       {/* 2. PWA Update Notification Banner */}
@@ -662,6 +713,7 @@ export default function App() {
               setDrawingMode('polygon');
             }}
             onImportTerritories={handleImportTerritories}
+            onReloadAllData={reloadAllDataFromDB}
           />
         )}
 
@@ -705,6 +757,8 @@ export default function App() {
             onSaveSettings={handleSaveSettings}
             onClearAllData={handleClearAllData}
             onOpenHelpGuide={() => setShowHelpModal(true)}
+            onReloadAllData={reloadAllDataFromDB}
+            onOpenInstallModal={() => setShowInstallModal(true)}
             isAdminUnlocked={isAdminUnlocked}
             isBiometricSupported={isBiometricSupported}
             onUnlockWithBiometrics={handleUnlockWithBiometrics}
@@ -783,6 +837,17 @@ export default function App() {
           showToast('🔓 Modo Administrador activado: Edición habilitada');
         }}
         onLock={handleLockAdmin}
+      />
+
+      {/* PWA Install Modal */}
+      <InstallPwaModal
+        isOpen={showInstallModal}
+        onClose={() => setShowInstallModal(false)}
+        deferredPrompt={deferredPrompt}
+        onInstallSuccess={() => {
+          setShowInstallModal(false);
+          showToast('🎉 ¡Aplicación instalada exitosamente!');
+        }}
       />
 
       {/* Instant Feedback Toast */}

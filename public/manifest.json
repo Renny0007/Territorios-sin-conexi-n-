@@ -2,7 +2,7 @@
   "id": "/",
   "name": "Territorios Offline - Cartografía & Navegación",
   "short_name": "Territorios",
-  "description": "Gestión, dibujo, navegación GPS y notas de campo de territorios poligonales sin conexión a internet.",
+  "description": "Aplicación web progresiva táctica para gestión, dibujo de polígonos, notas de campo, navegación peatonal y mapas sin conexión.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -11,7 +11,7 @@
     "standalone",
     "minimal-ui"
   ],
-  "orientation": "any",
+  "orientation": "portrait",
   "theme_color": "#0f172a",
   "background_color": "#020617",
   "lang": "es",
@@ -33,6 +33,12 @@
     {
       "src": "/icon-128.png",
       "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-180.png",
+      "sizes": "180x180",
       "type": "image/png",
       "purpose": "any"
     },

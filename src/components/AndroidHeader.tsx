@@ -12,7 +12,8 @@ import {
   Lock,
   Unlock,
   Fingerprint,
-  Settings
+  Settings,
+  Download
 } from 'lucide-react';
 import { GPSState } from '../types';
 import { gpsService } from '../services/gpsService';
@@ -24,6 +25,8 @@ interface AndroidHeaderProps {
   onCenterLocation?: () => void;
   onOpenBiometricPrompt?: () => void;
   onOpenSettings?: () => void;
+  onOpenInstallModal?: () => void;
+  isInstallable?: boolean;
 }
 
 export const AndroidHeader: React.FC<AndroidHeaderProps> = ({
@@ -32,7 +35,9 @@ export const AndroidHeader: React.FC<AndroidHeaderProps> = ({
   onOpenPermissionHelp,
   onCenterLocation,
   onOpenBiometricPrompt,
-  onOpenSettings
+  onOpenSettings,
+  onOpenInstallModal,
+  isInstallable = true
 }) => {
   const [time, setTime] = useState<string>('');
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
@@ -213,6 +218,19 @@ export const AndroidHeader: React.FC<AndroidHeaderProps> = ({
 
       {/* Right: Lock/Unlock Mode Button, Clock & Battery */}
       <div className="flex items-center gap-2 text-xs font-mono text-slate-300">
+        {/* PWA Install Button */}
+        {onOpenInstallModal && isInstallable && (
+          <button
+            id="btn-header-install-pwa"
+            onClick={onOpenInstallModal}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold font-sans bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-500/50 text-emerald-300 transition shadow-sm active:scale-95 cursor-pointer"
+            title="Instalar como Aplicación (PWA)"
+          >
+            <Download className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden sm:inline">Instalar</span>
+          </button>
+        )}
+
         {/* Visual Lock / Unlock status and prompt trigger */}
         {onOpenBiometricPrompt && (
           <button
