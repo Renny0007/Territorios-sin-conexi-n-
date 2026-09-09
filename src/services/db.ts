@@ -405,7 +405,40 @@ class DatabaseService {
     return JSON.stringify(backup, null, 2);
   }
 
-  async importFullBackup(jsonString: string): Promise<{ importedTerritories: number; importedNotes: number; importedLabels: number }> {
+  async saveRestorePoint(id: string, payload: any): Promise<void> {
+    const db = await this.getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('app_settings', 'readwrite');
+      const store = tx.objectStore('app_settings');
+      const request = store.put({ id, payload, updatedAt: Date.now() });
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async getRestorePoint(id: string): Promise<any> {
+    const db = await this.getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('app_settings', 'readonly');
+      const store = tx.objectStore('app_settings');
+      const request = store.get(id);
+      request.onsuccess = () => resolve(request.result?.payload || null);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async deleteRestorePoint(id: string): Promise<void> {
+    const db = await this.getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('app_settings', 'readwrite');
+      const store = tx.objectStore('app_settings');
+      const request = store.delete(id);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async importFullBackup(jsonString: string, replaceExisting: boolean = false): Promise<{ importedTerritories: number; importedNotes: number; importedLabels: number }> {
     const db = await this.getDB();
     let importedTerritories = 0;
     let importedNotes = 0;
@@ -442,6 +475,15 @@ class DatabaseService {
       const tx = db.transaction(storeNames, 'readwrite');
       const terrStore = tx.objectStore('territories');
       const noteStore = tx.objectStore('map_notes');
+
+      // If replaceExisting is true, clear old territories and notes first
+      if (replaceExisting) {
+        terrStore.clear();
+        noteStore.clear();
+        if (db.objectStoreNames.contains('map_labels')) {
+          tx.objectStore('map_labels').clear();
+        }
+      }
 
       // 1. Territories / Polygons
       const rawTerritories = Array.isArray(data) ? data : (data.territories || []);

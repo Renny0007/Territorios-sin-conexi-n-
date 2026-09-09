@@ -13,7 +13,8 @@ import {
   Unlock,
   Fingerprint,
   Settings,
-  Download
+  Download,
+  CloudDownload
 } from 'lucide-react';
 import { GPSState } from '../types';
 import { gpsService } from '../services/gpsService';
@@ -26,6 +27,7 @@ interface AndroidHeaderProps {
   onOpenBiometricPrompt?: () => void;
   onOpenSettings?: () => void;
   onOpenInstallModal?: () => void;
+  onOpenDatabaseSyncModal?: () => void;
   isInstallable?: boolean;
 }
 
@@ -37,6 +39,7 @@ export const AndroidHeader: React.FC<AndroidHeaderProps> = ({
   onOpenBiometricPrompt,
   onOpenSettings,
   onOpenInstallModal,
+  onOpenDatabaseSyncModal,
   isInstallable = true
 }) => {
   const [time, setTime] = useState<string>('');
@@ -147,10 +150,12 @@ export const AndroidHeader: React.FC<AndroidHeaderProps> = ({
     <header className="h-14 bg-slate-900 border-b border-slate-800 px-3 flex items-center justify-between select-none z-30 shrink-0 shadow-md">
       {/* Left: App title & Online status */}
       <div className="flex items-center gap-2.5">
-        <div className="flex items-center gap-1.5">
-          <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-black text-xs tracking-tighter shadow-inner">
-            <Radio className="w-4 h-4 text-emerald-400" />
-          </div>
+        <div className="flex items-center gap-2">
+          <img 
+            src="/icon-192.png" 
+            alt="Logo Territorios" 
+            className="w-7 h-7 rounded-lg border border-slate-700 shadow-sm object-cover"
+          />
           <div>
             <div className="flex items-center gap-1.5">
               <span className="font-bold text-sm tracking-wider text-slate-100 uppercase">Territorios</span>
@@ -254,6 +259,19 @@ export const AndroidHeader: React.FC<AndroidHeaderProps> = ({
                 <span className="hidden sm:inline">Desbloquear</span>
               </>
             )}
+          </button>
+        )}
+
+        {/* Database Sync from GitHub button (always accessible across all tabs) */}
+        {onOpenDatabaseSyncModal && (
+          <button
+            id="btn-header-sync-github"
+            onClick={onOpenDatabaseSyncModal}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold font-sans bg-purple-950/90 hover:bg-purple-900 border border-purple-500/60 text-purple-200 transition shadow-sm active:scale-95 cursor-pointer"
+            title="Actualizar base de datos desde GitHub o Gist"
+          >
+            <CloudDownload className="w-3.5 h-3.5 text-purple-400" />
+            <span className="hidden sm:inline">Actualizar</span>
           </button>
         )}
 

@@ -1,6 +1,6 @@
 // Service Worker for Territorios Offline PWA
 // Cache Version: increments with every major app release to invalidate obsolete assets
-const CACHE_NAME = 'territorios-shell-v2.8.1';
+const CACHE_NAME = 'territorios-shell-v2.8.2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',

@@ -42,6 +42,7 @@ import { UpdateNotificationBanner } from './components/UpdateNotificationBanner'
 import { LetterModal } from './components/LetterModal';
 import { BiometricPromptModal } from './components/BiometricPromptModal';
 import { InstallPwaModal } from './components/InstallPwaModal';
+import { DatabaseSyncModal } from './components/DatabaseSyncModal';
 import { biometricAuthService } from './services/biometricAuth';
 
 export default function App() {
@@ -96,6 +97,7 @@ export default function App() {
   const [showHelpModal, setShowHelpModal] = useState<boolean>(false);
   const [showPermissionModal, setShowPermissionModal] = useState<boolean>(false);
   const [showUpdateBanner, setShowUpdateBanner] = useState<boolean>(false);
+  const [showDatabaseSyncModal, setShowDatabaseSyncModal] = useState<boolean>(false);
 
   // Active Tile Download state
   const [activeDownload, setActiveDownload] = useState<{
@@ -620,6 +622,7 @@ export default function App() {
         onOpenBiometricPrompt={() => setShowBiometricModal(true)}
         onOpenSettings={() => setActiveTab('settings')}
         onOpenInstallModal={() => setShowInstallModal(true)}
+        onOpenDatabaseSyncModal={() => setShowDatabaseSyncModal(true)}
         isInstallable={!isStandalone}
       />
 
@@ -714,6 +717,7 @@ export default function App() {
             }}
             onImportTerritories={handleImportTerritories}
             onReloadAllData={reloadAllDataFromDB}
+            onOpenDatabaseSyncModal={() => setShowDatabaseSyncModal(true)}
           />
         )}
 
@@ -759,6 +763,7 @@ export default function App() {
             onOpenHelpGuide={() => setShowHelpModal(true)}
             onReloadAllData={reloadAllDataFromDB}
             onOpenInstallModal={() => setShowInstallModal(true)}
+            onOpenDatabaseSyncModal={() => setShowDatabaseSyncModal(true)}
             isAdminUnlocked={isAdminUnlocked}
             isBiometricSupported={isBiometricSupported}
             onUnlockWithBiometrics={handleUnlockWithBiometrics}
@@ -837,6 +842,15 @@ export default function App() {
           showToast('🔓 Modo Administrador activado: Edición habilitada');
         }}
         onLock={handleLockAdmin}
+      />
+
+      {/* Database Sync from GitHub Modal */}
+      <DatabaseSyncModal
+        isOpen={showDatabaseSyncModal}
+        onClose={() => setShowDatabaseSyncModal(false)}
+        localTerritoriesCount={territories.length}
+        onReloadAllData={reloadAllDataFromDB}
+        onShowToast={showToast}
       />
 
       {/* PWA Install Modal */}

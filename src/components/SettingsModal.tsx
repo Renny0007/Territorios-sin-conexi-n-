@@ -15,8 +15,14 @@ import {
   Lock,
   Unlock,
   Fingerprint,
+  KeyRound,
   CheckCircle2,
-  AlertTriangle
+  AlertTriangle,
+  ExternalLink,
+  CloudDownload,
+  Undo2,
+  History,
+  Github
 } from 'lucide-react';
 import { AppSettings, MapProviderId } from '../types';
 import { MAP_PROVIDERS } from '../services/tileManager';
@@ -24,6 +30,8 @@ import { dbService } from '../services/db';
 import { swUpdateManager } from '../services/swUpdateManager';
 import { APP_VERSION, APP_BUILD_DATE } from '../version';
 import { parseGeoJSON, parseKML } from '../services/geoUtils';
+import { biometricAuthService } from '../services/biometricAuth';
+import { githubSyncService, RestorePointInfo } from '../services/githubSyncService';
 
 interface SettingsModalProps {
   settings: AppSettings;
@@ -32,6 +40,7 @@ interface SettingsModalProps {
   onOpenHelpGuide: () => void;
   onReloadAllData?: () => Promise<void>;
   onOpenInstallModal?: () => void;
+  onOpenDatabaseSyncModal?: () => void;
   // Biometric / Admin Protection Props
   isAdminUnlocked: boolean;
   isBiometricSupported: boolean;
@@ -46,6 +55,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onOpenHelpGuide,
   onReloadAllData,
   onOpenInstallModal,
+  onOpenDatabaseSyncModal,
   isAdminUnlocked,
   isBiometricSupported,
   onUnlockWithBiometrics,
@@ -58,6 +68,49 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [isCheckingUpdate, setIsCheckingUpdate] = useState<boolean>(false);
   const [updateMsg, setUpdateMsg] = useState<string | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState<boolean>(false);
+  const [showPinConfig, setShowPinConfig] = useState<boolean>(false);
+  const [newPinInput, setNewPinInput] = useState<string>('');
+  const [pinChangeSuccess, setPinChangeSuccess] = useState<boolean>(false);
+  const [restorePoint, setRestorePoint] = useState<RestorePointInfo>({ exists: false });
+  const [isUndoingSync, setIsUndoingSync] = useState<boolean>(false);
+  const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    githubSyncService.getRestorePointInfo().then((info) => setRestorePoint(info));
+  }, []);
+
+  const handleUndoSyncFromSettings = async () => {
+    const confirmed = window.confirm(
+      '¿Deseas revertir los cambios y restaurar la versión anterior guardada antes de la última sincronización?'
+    );
+    if (!confirmed) return;
+
+    setIsUndoingSync(true);
+    setSyncFeedback(null);
+    try {
+      const res = await githubSyncService.undoLastSync();
+      if (onReloadAllData) {
+        await onReloadAllData();
+      }
+      const updated = await githubSyncService.getRestorePointInfo();
+      setRestorePoint(updated);
+      setSyncFeedback(`Versión anterior restaurada con éxito (${res.restoredTerritories} territorios recuperados).`);
+    } catch (err: any) {
+      setSyncFeedback(`Error: ${err.message || 'No se pudo restaurar.'}`);
+    } finally {
+      setIsUndoingSync(false);
+    }
+  };
+
+  const handleSaveNewPin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPinInput.trim().length >= 4) {
+      biometricAuthService.setAdminPin(newPinInput.trim());
+      setPinChangeSuccess(true);
+      setNewPinInput('');
+      setTimeout(() => setPinChangeSuccess(false), 3000);
+    }
+  };
 
   const handleBiometricClick = async () => {
     setIsAuthenticating(true);
@@ -265,7 +318,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <button
                 id="btn-lock-edition"
                 onClick={onLockAdmin}
-                className="w-full sm:w-auto px-4 py-3 bg-slate-900 hover:bg-rose-950 text-slate-200 hover:text-rose-200 font-bold text-xs sm:text-sm rounded-xl border border-slate-700 hover:border-rose-700 transition flex items-center justify-center gap-2 shrink-0 shadow-lg active:scale-95 whitespace-nowrap"
+                className="w-full sm:w-auto px-4 py-3 bg-slate-900 hover:bg-rose-950 text-slate-200 hover:text-rose-200 font-bold text-xs sm:text-sm rounded-xl border border-slate-700 hover:border-rose-700 transition flex items-center justify-center gap-2 shrink-0 shadow-lg active:scale-95 whitespace-nowrap cursor-pointer"
               >
                 <Unlock className="w-4 h-4 text-emerald-400" />
                 <span>Bloquear edición 🔓</span>
@@ -275,13 +328,65 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 id="btn-unlock-edition"
                 onClick={handleBiometricClick}
                 disabled={isAuthenticating}
-                className="w-full sm:w-auto px-4 py-3 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg shadow-amber-500/20 transition active:scale-95 flex items-center justify-center gap-2 shrink-0 whitespace-nowrap"
+                className="w-full sm:w-auto px-4 py-3 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg shadow-amber-500/20 transition active:scale-95 flex items-center justify-center gap-2 shrink-0 whitespace-nowrap cursor-pointer"
               >
                 <Fingerprint className="w-5 h-5 stroke-[2.5]" />
-                <span>{isAuthenticating ? 'Verificando huella...' : 'Desbloquear edición 🔒'}</span>
+                <span>{isAuthenticating ? 'Abriendo desbloqueo...' : 'Desbloquear edición 🔒'}</span>
               </button>
             )}
           </div>
+
+          {/* Sub-panel: Configurar PIN de respaldo */}
+          <div className="mt-4 pt-3 border-t border-slate-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2">
+              <KeyRound className="w-4 h-4 text-amber-400" />
+              <span className="text-slate-300 font-semibold">
+                PIN de Administrador: <span className="font-mono text-amber-300">{biometricAuthService.getAdminPin()}</span>
+              </span>
+            </div>
+
+            <button
+              type="button"
+              id="btn-toggle-pin-config"
+              onClick={() => setShowPinConfig(!showPinConfig)}
+              className="text-amber-400 hover:text-amber-300 font-bold underline underline-offset-2 cursor-pointer"
+            >
+              {showPinConfig ? 'Ocultar ajuste' : 'Cambiar PIN'}
+            </button>
+          </div>
+
+          {showPinConfig && (
+            <form onSubmit={handleSaveNewPin} className="mt-3 p-3 bg-slate-950/80 rounded-xl border border-slate-800 space-y-2">
+              <label className="block text-[11px] font-bold text-slate-300">
+                Nuevo PIN de Administrador (mínimo 4 números)
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  placeholder="ej. 5678"
+                  value={newPinInput}
+                  onChange={(e) => setNewPinInput(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 text-amber-300 font-mono px-3 py-1.5 rounded-lg text-xs focus:outline-none focus:border-amber-400"
+                />
+                <button
+                  type="submit"
+                  disabled={newPinInput.trim().length < 4}
+                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-slate-950 font-bold text-xs rounded-lg transition shrink-0 cursor-pointer"
+                >
+                  Guardar PIN
+                </button>
+              </div>
+              {pinChangeSuccess && (
+                <p className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  ¡PIN actualizado exitosamente!
+                </p>
+              )}
+            </form>
+          )}
         </div>
 
         {/* Map Provider Selection */}
@@ -340,6 +445,70 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               />
             </div>
           </div>
+        </div>
+
+        {/* GitHub / Cloud Remote Sync & Restore */}
+        <div className="bg-slate-900 border border-purple-900/40 rounded-2xl p-4 shadow-md space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs uppercase font-mono text-purple-300 font-bold flex items-center gap-2">
+              <Github className="w-4 h-4 text-purple-400" />
+              Sincronización en la Nube (GitHub / Gist)
+            </h3>
+            {restorePoint.exists && (
+              <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-600/40">
+                Punto de restauración listo
+              </span>
+            )}
+          </div>
+
+          <p className="text-xs text-slate-400">
+            Descarga las últimas actualizaciones de territorios directamente desde tu repositorio o Gist público de GitHub.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button
+              id="btn-open-sync-modal-from-settings"
+              onClick={onOpenDatabaseSyncModal}
+              className="p-3 bg-purple-950/40 hover:bg-purple-900/60 border border-purple-600/40 hover:border-purple-500 rounded-xl text-left transition flex items-center gap-2.5 cursor-pointer"
+            >
+              <CloudDownload className="w-4 h-4 text-purple-400 shrink-0" />
+              <div>
+                <span className="text-xs font-bold text-slate-200 block">Actualizar Base de Datos</span>
+                <span className="text-[10px] text-purple-300">Descargar polígonos desde enlace de GitHub</span>
+              </div>
+            </button>
+
+            {restorePoint.exists ? (
+              <button
+                id="btn-undo-sync-settings"
+                onClick={handleUndoSyncFromSettings}
+                disabled={isUndoingSync}
+                className="p-3 bg-amber-950/30 hover:bg-amber-950/60 border border-amber-600/40 hover:border-amber-500 rounded-xl text-left transition flex items-center gap-2.5 cursor-pointer disabled:opacity-50"
+              >
+                <Undo2 className="w-4 h-4 text-amber-400 shrink-0" />
+                <div>
+                  <span className="text-xs font-bold text-amber-300 block">Deshacer Última Actualización</span>
+                  <span className="text-[10px] text-slate-400">
+                    Restaurar versión del {restorePoint.formattedDate}
+                  </span>
+                </div>
+              </button>
+            ) : (
+              <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl flex items-center gap-2.5 text-slate-500">
+                <History className="w-4 h-4 text-slate-600 shrink-0" />
+                <div className="text-[10px]">
+                  <span>Respaldo automático: se generará una copia antes de tu próxima actualización.</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {syncFeedback && (
+            <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-slate-300 flex items-center gap-2">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>{syncFeedback}</span>
+            </div>
+          )}
         </div>
 
         {/* Backup & Restore */}
@@ -481,12 +650,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-md">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-emerald-950/80 border border-emerald-500/40 text-emerald-400 rounded-xl">
-                <Sparkles className="w-4 h-4" />
-              </div>
+              <img 
+                src="/icon-192.png" 
+                alt="Icono de la App" 
+                className="w-10 h-10 rounded-xl border border-slate-700 shadow object-cover" 
+              />
               <div>
                 <span className="text-xs font-bold text-slate-200 block font-mono">
-                  Versión {APP_VERSION} ({APP_BUILD_DATE})
+                  Territorios Offline v{APP_VERSION}
                 </span>
                 <span className="text-[11px] text-slate-400">
                   {updateMsg || 'PWA con ciclo de actualización y caché automatizada'}

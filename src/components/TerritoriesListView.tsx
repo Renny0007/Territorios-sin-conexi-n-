@@ -14,7 +14,9 @@ import {
   AlertCircle,
   FileCode,
   Share2,
-  Fingerprint
+  Fingerprint,
+  RefreshCw,
+  CloudDownload
 } from 'lucide-react';
 import { Territory, TerritoryStatus } from '../types';
 import { formatArea, formatDistance, exportToKML, exportToGeoJSON, parseKML, parseGeoJSON, getTerritoryDisplayCode } from '../services/geoUtils';
@@ -31,6 +33,7 @@ interface TerritoriesListViewProps {
   onStartDrawing: () => void;
   onImportTerritories: (imported: Partial<Territory>[]) => void;
   onReloadAllData?: () => Promise<void>;
+  onOpenDatabaseSyncModal?: () => void;
 }
 
 export const TerritoriesListView: React.FC<TerritoriesListViewProps> = ({
@@ -43,7 +46,8 @@ export const TerritoriesListView: React.FC<TerritoriesListViewProps> = ({
   onDeleteTerritory,
   onStartDrawing,
   onImportTerritories,
-  onReloadAllData
+  onReloadAllData,
+  onOpenDatabaseSyncModal
 }) => {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('todos');
@@ -185,8 +189,8 @@ export const TerritoriesListView: React.FC<TerritoriesListViewProps> = ({
   return (
     <div className="h-full w-full bg-slate-950 text-slate-100 flex flex-col overflow-hidden">
       {/* Top Banner & Stats */}
-      <div className="bg-slate-900 border-b border-slate-800 p-4 shrink-0 shadow-md">
-        <div className="flex items-center justify-between gap-2 mb-3">
+      <div className="bg-slate-900 border-b border-slate-800 p-3 sm:p-4 shrink-0 shadow-md">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3">
           <div>
             <h2 className="text-base font-bold uppercase tracking-wider text-slate-100 flex items-center gap-2">
               <Layers className="w-5 h-5 text-emerald-400" />
@@ -198,7 +202,21 @@ export const TerritoriesListView: React.FC<TerritoriesListViewProps> = ({
           </div>
 
           {/* Quick Action Buttons */}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Database Sync from GitHub - Highlighted Purple Button */}
+            {onOpenDatabaseSyncModal && (
+              <button
+                id="btn-open-sync-territories-header"
+                type="button"
+                onClick={onOpenDatabaseSyncModal}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-600 hover:to-indigo-600 text-white text-xs font-bold rounded-xl border border-purple-400/50 transition shadow-md shadow-purple-950/50 cursor-pointer active:scale-95"
+                title="Actualizar base de datos desde GitHub o Gist"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-purple-200 animate-spin-slow" />
+                <span>Actualizar (GitHub)</span>
+              </button>
+            )}
+
             {/* Import file / Restore Backup */}
             <label className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 cursor-pointer transition">
               <Upload className="w-3.5 h-3.5 text-cyan-400" />
