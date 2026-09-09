@@ -22,7 +22,8 @@ import {
   CloudDownload,
   Undo2,
   History,
-  Github
+  Github,
+  Database
 } from 'lucide-react';
 import { AppSettings, MapProviderId } from '../types';
 import { MAP_PROVIDERS } from '../services/tileManager';
@@ -32,6 +33,8 @@ import { APP_VERSION, APP_BUILD_DATE } from '../version';
 import { parseGeoJSON, parseKML } from '../services/geoUtils';
 import { biometricAuthService } from '../services/biometricAuth';
 import { githubSyncService, RestorePointInfo } from '../services/githubSyncService';
+import { masterDatabaseSyncService, VersionCheckResult } from '../services/masterDatabaseSyncService';
+import { getMasterDatabaseUrl, setMasterDatabaseUrl, hasMasterDatabaseUrl } from '../config/databaseConfig';
 
 interface SettingsModalProps {
   settings: AppSettings;
@@ -75,9 +78,141 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [isUndoingSync, setIsUndoingSync] = useState<boolean>(false);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
 
+  // Database Section state
+  const [dbLastUpdateDate, setDbLastUpdateDate] = useState<string>('');
+  const [dbUrl, setDbUrl] = useState<string>(getMasterDatabaseUrl());
+  const [isDbUrlConfigured, setIsDbUrlConfigured] = useState<boolean>(hasMasterDatabaseUrl());
+  const [dbUrlInput, setDbUrlInput] = useState<string>(getMasterDatabaseUrl());
+  const [isEditingDbUrl, setIsEditingDbUrl] = useState<boolean>(!hasMasterDatabaseUrl());
+  const [isDbUpdating, setIsDbUpdating] = useState<boolean>(false);
+  const [dbFeedback, setDbFeedback] = useState<{
+    type: 'updating' | 'success' | 'error' | 'info';
+    title: string;
+    description?: string;
+  } | null>(null);
+  const [newVersionCheck, setNewVersionCheck] = useState<VersionCheckResult | null>(null);
+  const [showConfirmUpdate, setShowConfirmUpdate] = useState<boolean>(false);
+
   React.useEffect(() => {
     githubSyncService.getRestorePointInfo().then((info) => setRestorePoint(info));
+    masterDatabaseSyncService.getLocalVersionInfo().then((info) => {
+      setDbLastUpdateDate(info.formattedDate);
+    });
+    const currentUrl = getMasterDatabaseUrl();
+    setDbUrl(currentUrl);
+    setDbUrlInput(currentUrl);
+    setIsDbUrlConfigured(hasMasterDatabaseUrl());
+    if (!hasMasterDatabaseUrl()) {
+      setIsEditingDbUrl(true);
+    }
   }, []);
+
+  const handleSaveDbUrl = () => {
+    const trimmed = dbUrlInput.trim();
+    if (!trimmed) {
+      setDbFeedback({
+        type: 'error',
+        title: 'URL requerida',
+        description: 'Debes proporcionar la URL del archivo database.json en GitHub para poder actualizar.'
+      });
+      return;
+    }
+    setMasterDatabaseUrl(trimmed);
+    setDbUrl(trimmed);
+    const valid = hasMasterDatabaseUrl();
+    setIsDbUrlConfigured(valid);
+    setIsEditingDbUrl(!valid);
+    setDbFeedback({
+      type: 'info',
+      title: 'URL guardada',
+      description: 'URL configurada correctamente. Ya puedes pulsar en "ACTUALIZAR BASE DE DATOS".'
+    });
+  };
+
+  const handleActualizarBaseDeDatos = async () => {
+    // 1. Validar que exista una URL válida para database.json
+    if (!hasMasterDatabaseUrl()) {
+      setIsEditingDbUrl(true);
+      setDbFeedback({
+        type: 'error',
+        title: '❌ No se pudo actualizar',
+        description: 'Necesitas proporcionar la URL del archivo database.json de tu repositorio de GitHub para poder actualizar.'
+      });
+      return;
+    }
+
+    // 2. Iniciar proceso de actualización
+    setIsDbUpdating(true);
+    setDbFeedback({
+      type: 'updating',
+      title: '⏳ Actualizando...',
+      description: 'Consultando archivo database.json en GitHub y comparando versión...'
+    });
+    setNewVersionCheck(null);
+    setShowConfirmUpdate(false);
+
+    try {
+      const check = await masterDatabaseSyncService.checkForUpdates();
+      if (check.hasNewVersion) {
+        setNewVersionCheck(check);
+        setShowConfirmUpdate(true);
+        setDbFeedback(null);
+      } else if (check.isDowngradeRisk) {
+        setDbFeedback({
+          type: 'info',
+          title: 'Base de datos al día',
+          description: check.message
+        });
+      } else {
+        setDbFeedback({
+          type: 'info',
+          title: '✅ Tu base de datos está al día',
+          description: `La versión en tu dispositivo (${check.localDate}) coincide con la de GitHub.`
+        });
+      }
+    } catch (err: any) {
+      setDbFeedback({
+        type: 'error',
+        title: '❌ No se pudo actualizar',
+        description: err.message || 'No se pudo conectar con GitHub para consultar database.json.'
+      });
+    } finally {
+      setIsDbUpdating(false);
+    }
+  };
+
+  const handleConfirmDatabaseUpdate = async () => {
+    setIsDbUpdating(true);
+    setShowConfirmUpdate(false);
+    setDbFeedback({
+      type: 'updating',
+      title: '⏳ Actualizando...',
+      description: 'Descargando database.json e importando territorios, polígonos y letras...'
+    });
+
+    try {
+      const res = await masterDatabaseSyncService.downloadAndApplyUpdate(newVersionCheck?.rawRemoteData);
+      if (onReloadAllData) {
+        await onReloadAllData();
+      }
+      setDbLastUpdateDate(res.formattedDate);
+      const updatedRestore = await githubSyncService.getRestorePointInfo();
+      setRestorePoint(updatedRestore);
+      setDbFeedback({
+        type: 'success',
+        title: '✅ Base de datos actualizada correctamente',
+        description: `Se actualizaron ${res.importedTerritories} territorios/polígonos, ${res.importedLabels} letras y ${res.importedNotes} notas. Guardado en almacenamiento local para uso sin conexión.`
+      });
+    } catch (err: any) {
+      setDbFeedback({
+        type: 'error',
+        title: '❌ No se pudo actualizar',
+        description: err.message || 'Ocurrió un error al importar los datos de database.json.'
+      });
+    } finally {
+      setIsDbUpdating(false);
+    }
+  };
 
   const handleUndoSyncFromSettings = async () => {
     const confirmed = window.confirm(
@@ -279,7 +414,192 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
       {/* Scrollable Settings Content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 max-w-2xl mx-auto w-full">
-        {/* 1. Control de Acceso y Edición (Biometría / Administrador) */}
+        {/* 1. SECCIÓN: Base de datos */}
+        <div className="bg-gradient-to-br from-purple-950/70 via-slate-900 to-indigo-950/60 border-2 border-purple-500/70 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-3">
+          <div className="flex items-center justify-between border-b border-purple-800/40 pb-2.5">
+            <h3 className="text-sm sm:text-base uppercase font-mono text-purple-300 font-black flex items-center gap-2">
+              <Database className="w-5 h-5 text-purple-400" />
+              Base de datos
+            </h3>
+            {restorePoint.exists && (
+              <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-600/40">
+                Punto de restauración listo
+              </span>
+            )}
+          </div>
+
+          <p className="text-xs text-slate-200 leading-relaxed">
+            Sincroniza polígonos, territorios, letras y notas directamente desde el archivo maestro <code className="text-purple-300 font-mono font-bold bg-slate-950/80 px-1.5 py-0.5 rounded border border-purple-800/50">database.json</code> en GitHub. Guarda todo en memoria local para uso 100% sin conexión.
+          </p>
+
+          {/* URL Status and Input */}
+          {(!isDbUrlConfigured || isEditingDbUrl) ? (
+            <div className="p-3.5 rounded-xl bg-amber-950/50 border border-amber-500/60 text-amber-200 space-y-2">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <div className="text-xs">
+                  <p className="font-bold text-amber-300">URL del repositorio GitHub</p>
+                  <p className="text-slate-300 mt-0.5">
+                    {!isDbUrlConfigured 
+                      ? 'Necesitas proporcionar la URL del archivo database.json en GitHub para poder actualizar.' 
+                      : 'Puedes actualizar la URL del archivo database.json si cambiaste de repositorio:'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                <input
+                  type="url"
+                  value={dbUrlInput}
+                  onChange={(e) => setDbUrlInput(e.target.value)}
+                  placeholder="https://raw.githubusercontent.com/usuario/repo/main/database.json"
+                  className="flex-1 bg-slate-950 border border-slate-700 focus:border-purple-500 text-slate-200 text-xs px-3 py-2 rounded-xl outline-none font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={handleSaveDbUrl}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl transition cursor-pointer shrink-0"
+                >
+                  Guardar URL
+                </button>
+                {isDbUrlConfigured && (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingDbUrl(false)}
+                    className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 font-semibold text-xs rounded-xl transition cursor-pointer shrink-0"
+                  >
+                    Cerrar
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="bg-slate-950/70 px-3 py-2 rounded-xl border border-slate-800 flex items-center justify-between text-xs">
+              <div className="truncate mr-2">
+                <span className="text-[10px] text-slate-400 block font-mono uppercase">URL configurada:</span>
+                <span className="text-[11px] font-mono text-purple-300 truncate block">{dbUrl}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditingDbUrl(true)}
+                className="text-xs text-cyan-400 hover:text-cyan-300 font-bold shrink-0 underline cursor-pointer"
+              >
+                Cambiar URL
+              </button>
+            </div>
+          )}
+
+          {/* BOTÓN GRANDE Y VISIBLE: 🔄 ACTUALIZAR BASE DE DATOS */}
+          <button
+            id="btn-settings-actualizar-base-de-datos"
+            type="button"
+            onClick={handleActualizarBaseDeDatos}
+            disabled={isDbUpdating}
+            className="w-full py-4 px-5 bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 hover:from-purple-500 hover:to-indigo-500 active:scale-[0.98] text-white font-black text-sm sm:text-base rounded-2xl shadow-xl shadow-purple-950/80 border border-purple-300/40 transition flex items-center justify-center gap-3 cursor-pointer disabled:opacity-60"
+          >
+            <RefreshCw className={`w-5 h-5 text-purple-200 ${isDbUpdating ? 'animate-spin' : ''}`} />
+            <span>🔄 ACTUALIZAR BASE DE DATOS</span>
+          </button>
+
+          {/* INDICADOR: Última actualización: [fecha] */}
+          <div className="text-center text-xs text-slate-300 font-medium py-0.5">
+            <span>Última actualización: {dbLastUpdateDate || 'Sin registro aún'}</span>
+          </div>
+
+          {/* Prompt de confirmación si hay nueva versión disponible */}
+          {showConfirmUpdate && newVersionCheck && (
+            <div className="p-4 bg-gradient-to-br from-purple-950 to-slate-900 border-2 border-purple-400 rounded-xl space-y-3 text-xs shadow-xl">
+              <p className="font-black text-sm text-purple-200">
+                Hay una nueva base de datos disponible. ¿Deseas actualizar?
+              </p>
+              <div className="grid grid-cols-2 gap-2 bg-slate-950/80 p-2.5 rounded-lg border border-purple-800/40 text-[11px]">
+                <div>
+                  <span className="text-slate-400 block">En GitHub:</span>
+                  <span className="font-bold text-emerald-400">{newVersionCheck.remoteTerritoriesCount} Territorios</span>
+                  <span className="text-[10px] text-slate-400 block">Fecha: {newVersionCheck.remoteDate}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block">En este dispositivo:</span>
+                  <span className="font-bold text-slate-300">{newVersionCheck.localTerritoriesCount} Territorios</span>
+                  <span className="text-[10px] text-slate-400 block">Fecha: {dbLastUpdateDate || 'Sin registro'}</span>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleConfirmDatabaseUpdate}
+                  className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 font-black text-slate-950 rounded-lg text-xs transition cursor-pointer"
+                >
+                  Sí, Actualizar Ahora
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmUpdate(false)}
+                  className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-xs transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Feedback & Status Messages */}
+          {dbFeedback && (
+            <div className={`p-3 rounded-xl border flex items-start gap-2.5 text-xs ${
+              dbFeedback.type === 'updating' 
+                ? 'bg-purple-950/60 border-purple-500/60 text-purple-200'
+                : dbFeedback.type === 'success'
+                  ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-200'
+                  : dbFeedback.type === 'error'
+                    ? 'bg-rose-950/60 border-rose-500/60 text-rose-200'
+                    : 'bg-slate-950 border-slate-700 text-slate-300'
+            }`}>
+              {dbFeedback.type === 'updating' ? (
+                <RefreshCw className="w-4 h-4 text-purple-300 animate-spin shrink-0 mt-0.5" />
+              ) : dbFeedback.type === 'success' ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+              ) : dbFeedback.type === 'error' ? (
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+              ) : (
+                <Info className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+              )}
+              <div className="space-y-0.5">
+                <p className="font-bold">{dbFeedback.title}</p>
+                {dbFeedback.description && (
+                  <p className="text-[11px] opacity-90">{dbFeedback.description}</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Undo / Revert Option */}
+          {restorePoint.exists && (
+            <div className="pt-1">
+              <button
+                id="btn-undo-sync-settings"
+                onClick={handleUndoSyncFromSettings}
+                className="w-full p-2.5 bg-amber-950/30 hover:bg-amber-950/60 border border-amber-600/40 hover:border-amber-500 rounded-xl text-left transition flex items-center gap-2.5 cursor-pointer disabled:opacity-50"
+              >
+                <Undo2 className="w-4 h-4 text-amber-400 shrink-0" />
+                <div>
+                  <span className="text-xs font-bold text-amber-300 block">Deshacer y Restaurar Versión Anterior</span>
+                  <span className="text-[10px] text-slate-400">
+                    Versión previa guardada ({restorePoint.formattedDate})
+                  </span>
+                </div>
+              </button>
+            </div>
+          )}
+
+          {syncFeedback && (
+            <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-slate-300 flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
+              <span>{syncFeedback}</span>
+            </div>
+          )}
+        </div>
+
+        {/* 2. Control de Acceso y Edición (Biometría / Administrador) */}
         <div className={`border rounded-2xl p-4 shadow-xl transition-all ${
           isAdminUnlocked 
             ? 'bg-emerald-950/40 border-emerald-500/60' 
@@ -445,70 +765,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               />
             </div>
           </div>
-        </div>
-
-        {/* GitHub / Cloud Remote Sync & Restore */}
-        <div className="bg-slate-900 border border-purple-900/40 rounded-2xl p-4 shadow-md space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs uppercase font-mono text-purple-300 font-bold flex items-center gap-2">
-              <Github className="w-4 h-4 text-purple-400" />
-              Sincronización en la Nube (GitHub / Gist)
-            </h3>
-            {restorePoint.exists && (
-              <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-600/40">
-                Punto de restauración listo
-              </span>
-            )}
-          </div>
-
-          <p className="text-xs text-slate-400">
-            Descarga las últimas actualizaciones de territorios directamente desde tu repositorio o Gist público de GitHub.
-          </p>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <button
-              id="btn-open-sync-modal-from-settings"
-              onClick={onOpenDatabaseSyncModal}
-              className="p-3 bg-purple-950/40 hover:bg-purple-900/60 border border-purple-600/40 hover:border-purple-500 rounded-xl text-left transition flex items-center gap-2.5 cursor-pointer"
-            >
-              <CloudDownload className="w-4 h-4 text-purple-400 shrink-0" />
-              <div>
-                <span className="text-xs font-bold text-slate-200 block">Actualizar Base de Datos</span>
-                <span className="text-[10px] text-purple-300">Descargar polígonos desde enlace de GitHub</span>
-              </div>
-            </button>
-
-            {restorePoint.exists ? (
-              <button
-                id="btn-undo-sync-settings"
-                onClick={handleUndoSyncFromSettings}
-                disabled={isUndoingSync}
-                className="p-3 bg-amber-950/30 hover:bg-amber-950/60 border border-amber-600/40 hover:border-amber-500 rounded-xl text-left transition flex items-center gap-2.5 cursor-pointer disabled:opacity-50"
-              >
-                <Undo2 className="w-4 h-4 text-amber-400 shrink-0" />
-                <div>
-                  <span className="text-xs font-bold text-amber-300 block">Deshacer Última Actualización</span>
-                  <span className="text-[10px] text-slate-400">
-                    Restaurar versión del {restorePoint.formattedDate}
-                  </span>
-                </div>
-              </button>
-            ) : (
-              <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl flex items-center gap-2.5 text-slate-500">
-                <History className="w-4 h-4 text-slate-600 shrink-0" />
-                <div className="text-[10px]">
-                  <span>Respaldo automático: se generará una copia antes de tu próxima actualización.</span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {syncFeedback && (
-            <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-slate-300 flex items-center gap-2">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>{syncFeedback}</span>
-            </div>
-          )}
         </div>
 
         {/* Backup & Restore */}

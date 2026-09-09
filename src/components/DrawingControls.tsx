@@ -9,7 +9,8 @@ import {
   AlertCircle,
   Type,
   Edit3,
-  Fingerprint
+  Fingerprint,
+  RefreshCw
 } from 'lucide-react';
 import { DrawingToolMode, GPSState, ActiveRoute, LabelFontSize } from '../types';
 import { formatArea, formatDistance } from '../services/geoUtils';
@@ -37,6 +38,8 @@ interface DrawingControlsProps {
   onChangeLetterFontSize?: (size: LabelFontSize) => void;
   onCancelLetterMode?: () => void;
   onOpenLetterModal?: () => void;
+  onUpdateDatabase?: () => void;
+  isUpdatingDatabase?: boolean;
 }
 
 export const DrawingControls: React.FC<DrawingControlsProps> = ({
@@ -57,7 +60,9 @@ export const DrawingControls: React.FC<DrawingControlsProps> = ({
   letterText = 'A',
   letterFontSize = 'md',
   onCancelLetterMode,
-  onOpenLetterModal
+  onOpenLetterModal,
+  onUpdateDatabase,
+  isUpdatingDatabase = false
 }) => {
   if (mode === 'none') {
     return (
@@ -111,6 +116,21 @@ export const DrawingControls: React.FC<DrawingControlsProps> = ({
           >
             <Footprints className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5] shrink-0" />
             <span>Caminar Perímetro</span>
+          </button>
+
+          {/* Botón ACTUALIZAR en la pantalla principal, junto a los demás botones */}
+          <button
+            id="btn-main-actualizar"
+            type="button"
+            onClick={onUpdateDatabase}
+            disabled={isUpdatingDatabase}
+            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-2 bg-purple-600 hover:bg-purple-500 text-white font-black text-xs sm:text-sm rounded-lg shadow-lg transition active:scale-95 whitespace-nowrap tracking-wide cursor-pointer ${
+              isUpdatingDatabase ? 'opacity-75 cursor-wait' : ''
+            }`}
+            title="Actualizar base de datos de territorios"
+          >
+            <RefreshCw className={`w-4 h-4 sm:w-5 sm:h-5 shrink-0 ${isUpdatingDatabase ? 'animate-spin' : ''}`} />
+            <span>ACTUALIZAR</span>
           </button>
 
           {activeRoute && onClearRoute && (

@@ -98,6 +98,7 @@ export default function App() {
   const [showPermissionModal, setShowPermissionModal] = useState<boolean>(false);
   const [showUpdateBanner, setShowUpdateBanner] = useState<boolean>(false);
   const [showDatabaseSyncModal, setShowDatabaseSyncModal] = useState<boolean>(false);
+  const [isUpdatingDatabase, setIsUpdatingDatabase] = useState<boolean>(false);
 
   // Active Tile Download state
   const [activeDownload, setActiveDownload] = useState<{
@@ -577,6 +578,86 @@ export default function App() {
     }
   }, []);
 
+  // Actualizar base de datos de territorios desde la URL de GitHub
+  const handleUpdateTerritoriesDatabase = useCallback(async () => {
+    if (isUpdatingDatabase) return;
+    setIsUpdatingDatabase(true);
+
+    const TARGET_URL = 'https://raw.githubusercontent.com/Renny0007/Base-de-datos-territorio/refs/heads/main/territorios.json';
+
+    try {
+      // 1. Descargar el archivo JSON desde la URL
+      const fetchUrl = `${TARGET_URL}?_t=${Date.now()}`;
+      const response = await fetch(fetchUrl);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const text = await response.text();
+
+      // 2. Validar que el JSON sea correcto
+      let parsed: any;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        throw new Error('JSON inválido');
+      }
+
+      const rawTerritories = Array.isArray(parsed) ? parsed : (parsed.territories || []);
+      if (!Array.isArray(rawTerritories) || rawTerritories.length === 0) {
+        throw new Error('Estructura de territorios vacía o no válida');
+      }
+
+      const validTerritories = rawTerritories.filter(
+        (t: any) => t && Array.isArray(t.coordinates) && t.coordinates.length >= 3
+      );
+      if (validTerritories.length === 0) {
+        throw new Error('No contiene polígonos válidos');
+      }
+
+      // 3. Reemplazar los datos locales de territorios con los nuevos datos
+      // 4. Guardarlos para que funcionen sin conexión (IndexedDB)
+      await dbService.importFullBackup(text, true);
+
+      // Recargar datos en memoria para actualizar la interfaz
+      await reloadAllDataFromDB();
+
+      // Guardar metadata de sincronización
+      try {
+        const timestamp = Date.now();
+        const formattedDate = new Date(timestamp).toLocaleString('es-ES', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+        const metaObj = {
+          version: parsed.version || 2,
+          updatedAt: timestamp,
+          formattedDate,
+          territoriesCount: validTerritories.length,
+          labelsCount: Array.isArray(parsed.labels) ? parsed.labels.length : 0,
+          notesCount: Array.isArray(parsed.notes) ? parsed.notes.length : 0,
+          sourceUrl: TARGET_URL
+        };
+        localStorage.setItem('territorios_master_db_version_info', JSON.stringify(metaObj));
+        localStorage.setItem('territorios_master_db_meta', JSON.stringify(metaObj));
+      } catch {
+        // Ignorar fallo de almacenamiento local secundario
+      }
+
+      // 5. Mostrar "Actualización completada" al terminar
+      showToast('Actualización completada');
+    } catch (err) {
+      console.error('Error al actualizar base de datos:', err);
+      // 6. Si falla la descarga o el JSON es inválido, conservar los datos actuales y mostrar "No se pudo actualizar"
+      showToast('No se pudo actualizar');
+    } finally {
+      setIsUpdatingDatabase(false);
+    }
+  }, [isUpdatingDatabase, reloadAllDataFromDB]);
+
   const handleImportTerritories = async (imported: Partial<Territory>[]) => {
     const savedList: Territory[] = [];
     for (const item of imported) {
@@ -695,6 +776,8 @@ export default function App() {
             onChangeLetterFontSize={setActiveLetterSize}
             onCancelLetterMode={() => setDrawingMode('none')}
             onOpenLetterModal={() => setShowLetterModal(true)}
+            onUpdateDatabase={handleUpdateTerritoriesDatabase}
+            isUpdatingDatabase={isUpdatingDatabase}
           />
         </div>
 
